@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paths of Glory — Dice Analyzer</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <h1>Paths of Glory — Dice Analyzer</h1>
+  <p class="subtitle">Upload a saved game-log page and see how random the dice really were.</p>
+
+  <div class="privacy-note">
+    <strong>Nothing you upload ever leaves your browser.</strong> This page never uploads your file
+    anywhere — it's read locally and parsed on your device. There's no server, no account, no tracking.
+    That's also why you have to save the file yourself: this tool can't (and won't) fetch a game
+    from Rally the Troops on your behalf, since that would require it to bypass Rally's login.
+  </div>
+
+  <div id="drop-zone" tabindex="0">
+    <div><strong>Drop a game-log HTML file here, or click to choose one</strong></div>
+    <div class="hint">
+      Log into your game on Rally the Troops, "View Page Source" (or Save Page), and drop that file here.
+      A full page save works — only the parts that ever contain a die roll are read.
+    </div>
+    <input type="file" id="file-input" accept=".html,.htm,text/html">
+  </div>
+
+  <div class="status" id="status"></div>
+  <div class="warning" id="warning" hidden></div>
+
+  <section id="results" hidden>
+    <div class="download-row">
+      <button class="download-btn" id="download-csv">⬇ Download CSV (cleaned data)</button>
+      <button class="download-btn" id="download-report">⬇ Download report.html</button>
+    </div>
+    <iframe id="report-frame" title="Dice analysis report"></iframe>
+  </section>
+
+  <details class="how-it-works">
+    <summary>How this works / what it looks for</summary>
+    <p>Every die roll in a Rally the Troops <em>Paths of Glory</em> game log is an empty
+    <code>&lt;span class="die {ap|cp} d{1-6}"&gt;</code> — the class attribute carries the side and the
+    raw value. This tool classifies every roll into one of five categories from the text around it:</p>
+    <ul>
+      <li><strong>Mandated Offensive</strong> — the per-turn CP/AP roll that assigns which power must attack</li>
+      <li><strong>Combat Fire</strong> — attacker's/defender's fire in a battle, tagged with which role rolled it</li>
+      <li><strong>Entrench</strong> — voluntary entrenchment attempts</li>
+      <li><strong>Flank Attempt</strong></li>
+      <li><strong>Siege</strong></li>
+    </ul>
+    <p>If a roll doesn't match any of those five (e.g. the site's HTML changed, or a roll type this
+    tool doesn't know about yet), you'll see a warning banner above with the count — everything else
+    is still parsed correctly.</p>
+    <p>This is the browser port of a small local Python pipeline
+    (<code>parse_dice.py</code> / <code>build_report.py</code>) — see the repo README for details.</p>
+  </details>
+
+  <footer>
+    Not affiliated with Rally the Troops or GMT Games. Fully open source — see the repo this page is
+    hosted from for the code.
+  </footer>
+</main>
+<script src="js/parser.js"></script>
+<script src="js/report.js"></script>
+<script src="js/csv.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
