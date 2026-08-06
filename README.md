@@ -1,5 +1,8 @@
 # Paths of Glory — Dice Analyzer
 
+**🔗 Live site: https://ejamer.github.io/rtt-paths-of-glory-dice-analyzer/**
+*(GitHub Pages hasn't successfully deployed yet as of this writing — link is here regardless so it's easy to find/bookmark once it is.)*
+
 A static, no-backend web page that turns a saved *Paths of Glory* game log
 (from [Rally the Troops](https://rally-the-troops.com/)) into a dice-roll
 analysis — average rolls per side, distribution vs. a fair d6, trends over
@@ -17,14 +20,25 @@ logged in, and upload that file here.
 ## Using it
 
 1. Open the game on Rally the Troops while logged in.
-2. "View Page Source" (or Save Page As) and save the HTML.
-3. Drop that file onto the page (or the hosted version, once deployed).
+2. Save the page as **"Webpage, Complete"** (in Chrome: File → Save Page As →
+   format dropdown → "Webpage, Complete"). This matters — see below.
+3. Drop the resulting `.htm` file onto the page (you can ignore the
+   `<pagename>_files/` folder saved alongside it; the tool never reads it).
 4. View the report inline, or download the cleaned CSV / a standalone copy
    of the report HTML.
 
-A full page save works — the parser locates and extracts just the
-`<div id="log">...</div>` portion itself, since that's the only place a die
-roll ever appears.
+**"Webpage, Complete" is the only save option that actually works, and this
+was confirmed by testing all three** against the real parser, not assumed:
+
+| Save option | Extension | Works? | Why |
+|---|---|---|---|
+| Webpage, HTML Only | `.html` | ❌ | Saves the raw HTML the server sends *before* the page's JavaScript runs — `<div id="log">` is present but empty, since the log is rendered client-side after load. Same problem with plain "View Page Source." |
+| **Webpage, Complete** | `.htm` | ✅ | Captures the live DOM *after* JavaScript has rendered it — this is the one with actual game data in it. |
+| Webpage, Single File | `.mhtml` | ❌ | MHTML is a MIME-wrapped format (quoted-printable/base64 inside email-style headers), not plain HTML — the parser doesn't unwrap it. |
+
+The parser locates and extracts just the `<div id="log">...</div>` portion of
+whatever you give it, since that's the only place a die roll ever appears —
+so a full "Complete" page save works fine as input, no manual trimming needed.
 
 ## How it's built
 
