@@ -124,7 +124,13 @@
     });
 
     // --- expected vs. actual combat outcome, per methodology's CRT-column formula ---
-    var expVsActual = { comparable: 0, upsetCount: 0, upsetsBySide: { cp: 0, ap: 0 }, upsetDetails: { cp: [], ap: [] } };
+    var expVsActual = {
+      comparable: 0, upsetCount: 0,
+      upsetsBySide: { cp: 0, ap: 0 }, upsetDetails: { cp: [], ap: [] },
+      // "underdog tie": one side was expected to win decisively but the actual result was a
+      // tie — counted against expected winner, but not creditable as either side's win.
+      underdogTiesBySide: { cp: 0, ap: 0 }, underdogTieDetails: { cp: [], ap: [] },
+    };
     combats.forEach(function (c) {
       if (!c.actual || !c.attacker.force_type || !c.defender.force_type) return;
       var expAtt = PogTables.expectedLosses(c.attacker.force_type, c.attacker.cf, c.attacker.column_shift, c.attacker.die_modifier);
@@ -132,17 +138,24 @@
       var expWinnerSide = expAtt > expDef ? c.attacker.side : (expAtt < expDef ? c.defender.side : "tie");
       var actWinnerSide = c.actual.winner === "attacker" ? c.attacker.side : (c.actual.winner === "defender" ? c.defender.side : "tie");
       expVsActual.comparable++;
-      if (expWinnerSide !== actWinnerSide) {
-        expVsActual.upsetCount++;
-        if (actWinnerSide !== "tie") {
-          expVsActual.upsetsBySide[actWinnerSide]++;
-          expVsActual.upsetDetails[actWinnerSide].push({
-            location: c.location, turn: c.turn,
-            attacker: c.attacker, defender: c.defender,
-            expWinnerSide: expWinnerSide, expAtt: expAtt, expDef: expDef,
-            lossRatio: c.actual.attacker_value + ":" + c.actual.defender_value,
-          });
-        }
+      if (expWinnerSide === actWinnerSide) return;
+      expVsActual.upsetCount++;
+      var detail = {
+        location: c.location, turn: c.turn,
+        attacker: c.attacker, defender: c.defender,
+        expWinnerSide: expWinnerSide, expAtt: expAtt, expDef: expDef,
+        lossRatio: c.actual.attacker_value + ":" + c.actual.defender_value,
+      };
+      if (actWinnerSide !== "tie") {
+        expVsActual.upsetsBySide[actWinnerSide]++;
+        expVsActual.upsetDetails[actWinnerSide].push(detail);
+      } else if (expWinnerSide !== "tie") {
+        // Credited to the side that *wasn't* expected to win: they were supposed to lose this
+        // one outright but held on for a tie instead, so the tie reads as a good result for
+        // them (and a below-expectation one for the side that was expected to win it).
+        var tieBeneficiary = expWinnerSide === "cp" ? "ap" : "cp";
+        expVsActual.underdogTiesBySide[tieBeneficiary]++;
+        expVsActual.underdogTieDetails[tieBeneficiary].push(detail);
       }
     });
 
@@ -647,6 +660,16 @@
     }).join("");
   }
 
+  /** A collapsed-by-default detail table for one side's unexpected wins/ties — there can be several of these, so hide them behind a click. */
+  function upsetDetailsSection(baseLabel, details) {
+    if (!details.length) return '<h4>' + baseLabel + '</h4>\n<p class="note">None.</p>\n';
+    return '<h4>' + baseLabel + ' (' + details.length + ')</h4>\n' +
+      '<details class="cat-table"><summary><span class="count">click to expand table</span></summary>' +
+      '<div class="table-wrap"><table><thead><tr><th>Turn</th><th>Location</th><th>Attacker</th><th>Roll</th>' +
+      '<th>Defender</th><th>Roll</th><th>Loss ratio</th><th>Expected ratio</th><th>Expected winner</th></tr></thead>' +
+      '<tbody>' + upsetDetailRows(details) + '</tbody></table></div></details>\n';
+  }
+
   function flankModifierRows(stats) {
     var out = [];
     SIDES.forEach(function (s) {
@@ -709,36 +732,60 @@
     var overallDiff = stats.overallStats.cp.mean - stats.overallStats.ap.mean;
     var betterSide = overallDiff > 0 ? "cp" : (overallDiff < 0 ? "ap" : null);
 
-    var verdictBits = [];
+    // Paragraph 1 — raw luck: are the dice themselves lopsided, independent of game context?
+    var verdictP1;
     if (Math.abs(overallDiff) < 0.15) {
-      verdictBits.push(
+      verdictP1 =
         "Overall raw die averages are nearly identical (CP " + fmt(stats.overallStats.cp.mean) + " vs " +
         "AP " + fmt(stats.overallStats.ap.mean) + ", both close to the fair-die expectation of 3.5), and neither " +
         "side's distribution is far enough from uniform to call the dice themselves biased " +
-        "(chi-square " + fmt(stats.chi2.cp) + " / " + fmt(stats.chi2.ap) + ", critical value at p=0.05 is " + CHI2_CRIT_05 + ")."
-      );
+        "(chi-square " + fmt(stats.chi2.cp) + " / " + fmt(stats.chi2.ap) + ", critical value at p=0.05 is " + CHI2_CRIT_05 + ").";
     } else {
       var lead = SIDE_NAME[betterSide];
       var other = betterSide === "cp" ? "ap" : "cp";
-      verdictBits.push(
+      verdictP1 =
         lead + " has rolled noticeably higher on average (" + fmt(stats.overallStats[betterSide].mean) + " vs " +
         fmt(stats.overallStats[other].mean) + "), though with only " +
-        (stats.overallStats.cp.n + stats.overallStats.ap.n) + " rolls total this could still be within normal variance."
-      );
+        (stats.overallStats.cp.n + stats.overallStats.ap.n) + " rolls total this could still be within normal variance.";
     }
+
+    // Paragraph 2 — combat: win tally, then whether *unexpected* wins (the real tell for
+    // whether good dice landed at the right moment) skew toward one side.
     var wt = stats.winTally;
     var ev = stats.expVsActual;
-    verdictBits.push(
-      "Where the two sides really diverge is combat <em>outcomes</em>: " + SIDE_NAME.cp + " has won " +
-      wt.cp.win + " of " + (wt.cp.win + wt.cp.tie + wt.cp.loss) +
-      " resolved combats to " + SIDE_NAME.ap + "'s " + wt.ap.win + ". That's driven as much by Combat Factor " +
-      "totals (bigger stacks push the CRT result up almost regardless of the roll) as by the dice — " +
-      (ev.comparable ? "weighing each combat against what the stacks alone would predict, " + ev.upsetCount + " of " +
-        ev.comparable + " (" + pct(ev.upsetCount, ev.comparable) + "%) went the other way than expected" :
-        "see the Combat section below for how outcomes compare to what the stacks alone would predict") +
-      " — the roll-average comparison above is the fairer luck read; the Combat section breaks down where the upsets happened."
-    );
-    var verdict = verdictBits.join(" ");
+    // Unexpected wins count double underdog ties when scoring "who the dice helped" — a full
+    // upset is a bigger break than fighting a losing combat to a draw. Only called for one side
+    // if the gap is more than 15% of the combined score; inside that, treat it as a wash.
+    var GOOD_BREAK_THRESHOLD = 0.15;
+    var verdictP2 =
+      SIDE_NAME.cp + " has won " + wt.cp.win + " of " + (wt.cp.win + wt.cp.tie + wt.cp.loss) +
+      " resolved combats to " + SIDE_NAME.ap + "'s " + wt.ap.win + ". ";
+    if (ev.comparable) {
+      var cpUp = ev.upsetsBySide.cp, apUp = ev.upsetsBySide.ap;
+      var cpTie = ev.underdogTiesBySide.cp, apTie = ev.underdogTiesBySide.ap;
+      verdictP2 += SIDE_NAME.cp + " picked up " + cpUp + " unexpected win" + (cpUp === 1 ? "" : "s") +
+        " and " + cpTie + " underdog tie" + (cpTie === 1 ? "" : "s") + " to " + SIDE_NAME.ap + "'s " +
+        apUp + " and " + apTie + ". ";
+      var cpScore = cpUp * 2 + cpTie, apScore = apUp * 2 + apTie, totalScore = cpScore + apScore;
+      var scoreDiffPct = totalScore ? Math.abs(cpScore - apScore) / totalScore : 0;
+      if (scoreDiffPct > GOOD_BREAK_THRESHOLD) {
+        var goodLead = cpScore > apScore ? "cp" : "ap";
+        verdictP2 += "Weighing wins twice as heavily as ties, that tilts toward " + SIDE_NAME[goodLead] +
+          " — the timing of good dice probably helped them out (though not every battle carries the same " +
+          "strategic weight, so treat this as a rough read, not the final word).";
+      } else {
+        verdictP2 += "Weighing wins twice as heavily as ties, that's close enough between the two sides that " +
+          "the timing of good dice probably didn't help either side much (though not every battle carries the " +
+          "same strategic weight, so treat this as a rough read, not the final word).";
+      }
+    } else {
+      verdictP2 += "See the Combat section below for the full expected-vs-actual breakdown.";
+    }
+
+    // Paragraph 3 — pointer to the other categories.
+    var verdictP3 =
+      "The categories below break things down further — see Mandated Offensive, Siege, and Entrench for how " +
+      "those rolls may have affected the outcome as well.";
 
     var catRowsMap = {};
     CATS.forEach(function (c) { catRowsMap[c] = rows.filter(function (r) { return r.category === c; }); });
@@ -804,7 +851,7 @@
       '  <div class="card"><div class="lbl">Combats resolved</div><div class="big">' + (wt.cp.win + wt.cp.tie + wt.cp.loss) + '</div>' +
       '<div class="lbl">AP ' + wt.ap.win + 'W–' + wt.ap.tie + 'T–' + wt.ap.loss + 'L</div></div>\n' +
       '</div>\n' +
-      '<h2 id="summary">Summary</h2>\n<p>' + verdict + '</p>\n' +
+      '<h2 id="summary">Summary</h2>\n<p>' + verdictP1 + '</p>\n<p>' + verdictP2 + '</p>\n<p>' + verdictP3 + '</p>\n' +
       '<nav class="toc"><strong>Jump to:</strong> ' +
       '<a href="#raw-averages">Raw Averages</a> · <a href="#combat">Combat</a> · <a href="#entrench">Entrench</a> · ' +
       '<a href="#siege">Siege</a> · <a href="#mandated-offensive">Mandated Offensive</a></nav>\n' +
@@ -860,16 +907,18 @@
       '<div class="panel"><table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>' +
       '<tr><td>Combats compared</td><td>' + ev.comparable + '</td></tr>' +
       '<tr><td>Went against the expected winner</td><td>' + ev.upsetCount + ' (' + pct(ev.upsetCount, ev.comparable) + '%)</td></tr>' +
-      '<tr><td>Unexpected wins — Central Powers</td><td>' + ev.upsetsBySide.cp + '</td></tr>' +
       '<tr><td>Unexpected wins — Allied Powers</td><td>' + ev.upsetsBySide.ap + '</td></tr>' +
+      '<tr><td>Underdog ties — Allied Powers</td><td>' + ev.underdogTiesBySide.ap + '</td></tr>' +
+      '<tr><td>Unexpected wins — Central Powers</td><td>' + ev.upsetsBySide.cp + '</td></tr>' +
+      '<tr><td>Underdog ties — Central Powers</td><td>' + ev.underdogTiesBySide.cp + '</td></tr>' +
       '</tbody></table></div>\n' +
+      '<p class="note">"Underdog ties" are combats where a side was expected to win outright but the actual\n' +
+      'result was a tie instead — counted against the expected winner above. The tie itself is credited to the\n' +
+      '<em>other</em> side below: they were expected to lose this one outright and fought it to a draw instead,\n' +
+      'which reads as a good result for them (and a below-expectation one for whoever was favored).</p>\n' +
       SIDES.map(function (sd) {
-        var details = ev.upsetDetails[sd];
-        if (!details.length) return '<h4>Unexpected wins — ' + SIDE_NAME[sd] + '</h4>\n<p class="note">None.</p>\n';
-        return '<h4>Unexpected wins — ' + SIDE_NAME[sd] + ' (' + details.length + ')</h4>\n' +
-          '<div class="panel"><div class="table-wrap"><table><thead><tr><th>Turn</th><th>Location</th><th>Attacker</th><th>Roll</th>' +
-          '<th>Defender</th><th>Roll</th><th>Loss ratio</th><th>Expected ratio</th><th>Expected winner</th></tr></thead>' +
-          '<tbody>' + upsetDetailRows(details) + '</tbody></table></div></div>\n';
+        return upsetDetailsSection("Unexpected wins — " + SIDE_NAME[sd], ev.upsetDetails[sd]) +
+          upsetDetailsSection("Underdog ties — " + SIDE_NAME[sd], ev.underdogTieDetails[sd]);
       }).join("") +
       '<h3>Win rate over time</h3>\n' +
       '<p class="note">One dot per side per turn — the win rate for just the combats resolved <em>that</em> turn, not\n' +
