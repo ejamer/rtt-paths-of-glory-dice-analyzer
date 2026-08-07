@@ -33,6 +33,35 @@
   function upper(side) { return side === "cp" ? "CP" : "AP"; }
   function successOrFail(outcome) { return /^success/i.test(String(outcome)) ? "success" : "fail"; }
 
+  function isPrimitive(v) { return v === null || typeof v !== "object"; }
+
+  /**
+   * Same shape as JSON.stringify(value, null, 2), except arrays whose elements are all
+   * primitives — all_ap_rolls, entrench_rolls.ap_rolls, etc, the flat roll-sequence arrays —
+   * are kept on one line instead of one element per line. That's the whole point of this
+   * function: those arrays can be dozens of numbers long, and one-per-line makes them take
+   * more scrolling to skim than the actual per-event data below them. combat_results (an
+   * array of objects) and everything else still gets normal multi-line formatting.
+   */
+  function prettyStringify(value, indent) {
+    indent = indent || "";
+    var nextIndent = indent + "  ";
+    if (Array.isArray(value)) {
+      if (value.length === 0 || value.every(isPrimitive)) {
+        return "[" + value.map(function (v) { return JSON.stringify(v); }).join(", ") + "]";
+      }
+      var items = value.map(function (v) { return nextIndent + prettyStringify(v, nextIndent); });
+      return "[\n" + items.join(",\n") + "\n" + indent + "]";
+    }
+    if (value !== null && typeof value === "object") {
+      var keys = Object.keys(value);
+      if (keys.length === 0) return "{}";
+      var lines = keys.map(function (k) { return nextIndent + JSON.stringify(k) + ": " + prettyStringify(value[k], nextIndent); });
+      return "{\n" + lines.join(",\n") + "\n" + indent + "}";
+    }
+    return JSON.stringify(value);
+  }
+
   function combatDetails(role) {
     return {
       combat_cards: [],
@@ -140,7 +169,10 @@
     };
   }
 
-  var api = { buildGameJSON: buildGameJSON };
+  /** buildGameJSON's return value, formatted for the downloadable file — see prettyStringify. */
+  function stringifyGameJSON(json) { return prettyStringify(json); }
+
+  var api = { buildGameJSON: buildGameJSON, stringifyGameJSON: stringifyGameJSON };
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   } else {

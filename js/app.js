@@ -140,7 +140,7 @@
   downloadJsonBtn.addEventListener("click", function () {
     if (!currentParsed) return;
     var json = PogSchema.buildGameJSON(currentParsed);
-    downloadText(JSON.stringify(json, null, 2), currentBaseName + " - data.json", "application/json");
+    downloadText(PogSchema.stringifyGameJSON(json), currentBaseName + " - data.json", "application/json");
   });
   downloadReportBtn.addEventListener("click", function () {
     if (!currentReportHtml) return;

@@ -113,6 +113,11 @@ assertEq(json.combat_results[0].defender_details.die_modifier, "+1 Fake Flamethr
 assertEq(json.siege_rolls.siege_attempt_1.result, "fail", "schema: siege_attempt_1 result now populated");
 assertEq(json.mandated_offense_rolls.turn_1.cp_result, "None", "schema: mandated_offense_rolls turn_1 cp_result");
 
+var jsonText = PogSchema.stringifyGameJSON(json);
+assertEq(JSON.parse(jsonText), json, "schema: stringifyGameJSON round-trips to the same data as buildGameJSON");
+assertTrue(/"all_cp_rolls": \[[\d, ]+\]/.test(jsonText), "schema: all_cp_rolls rendered on one line, not one number per line");
+assertTrue(/"combat_results": \[\n\s+\{/.test(jsonText), "schema: combat_results (array of objects) still multi-line");
+
 console.log("");
 console.log(failures === 0 ? "All checks passed." : failures + " check(s) FAILED.");
 process.exit(failures === 0 ? 0 : 1);
