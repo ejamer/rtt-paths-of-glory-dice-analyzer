@@ -3,7 +3,8 @@
   "use strict";
 
   var FIELDS = ["turn", "action", "side", "category", "role", "space", "raw_value",
-                "modifier", "effective_value", "outcome", "entrench_attempt_no"];
+                "modifier", "effective_value", "outcome", "entrench_attempt_no",
+                "force_type", "nationality", "target_cf"];
 
   function csvEscape(v) {
     var s = v === null || v === undefined ? "" : String(v);

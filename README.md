@@ -22,8 +22,8 @@ in, then upload that file here.
    that works — see below.
 3. Drop the resulting `.htm` file onto the page (the `<pagename>_files/`
    folder saved alongside it is never read — safe to ignore).
-4. View the report inline, or download the cleaned CSV / a standalone copy
-   of the report HTML.
+4. View the report inline, or download the cleaned CSV, the raw parsed data
+   as JSON, or a standalone copy of the report HTML.
 
 ### Why "Webpage, Complete" specifically
 
@@ -46,20 +46,30 @@ framework:
 
 - `js/parser.js` — turns the log HTML into an array of per-roll row objects
   (turn, action, side, category, role, space, raw value, modifier, effective
-  value, outcome). Classifies every `<span class="die {ap|cp} d{1-6}">` into
-  one of five categories from the surrounding trigger text.
+  value, outcome, plus force type/nationality/target CF where applicable)
+  and a `combats` array that groups each combat's attacker/defender fire,
+  flank attempt, victory-line result, and retreat into one record.
+  Classifies every `<span class="die {ap|cp} d{1-6}">` into one of five
+  categories from the surrounding trigger text.
+- `js/tables.js` — the Corps/Army Fire Tables, Army Loss Factors, and
+  Mandated Offensive tables from `methodology.md`, plus the lookup helpers
+  (expected losses, entrench target) built on them.
 - `js/report.js` — computes the stats (means, chi-square uniformity check,
-  combat win/loss tally, entrench success by modifier, per-turn + rolling
-  trend) and renders a self-contained report as an HTML string, with
-  hand-built inline SVG charts (no charting library).
-- `js/csv.js` — the same row objects as a downloadable CSV.
+  combat win/loss tally, expected-vs-actual outcomes, retreats, per-category
+  success-rate breakdowns, per-turn + rolling trend) and renders a
+  self-contained report as an HTML string, with hand-built inline SVG charts
+  (no charting library).
+- `js/schema.js` — the same parsed data reshaped into the nested per-event
+  JSON export described in `methodology.md` (game metadata, combat results,
+  entrench/siege/mandated-offensive rolls).
+- `js/csv.js` — the row objects as a downloadable CSV.
 - `js/app.js` — the only browser-specific file: wires up the upload/drop
-  zone, renders the report into an `<iframe srcdoc>`, and the two download
-  buttons.
+  zone, renders the report into an `<iframe srcdoc>`, and the three download
+  buttons (CSV, JSON, report HTML).
 
-`parser.js` and `report.js` are UMD-style (`module.exports` under Node,
-`window.PogParser`/`window.PogReport` in a browser), so the exact same code
-that runs on the page also runs under the test suite.
+`parser.js`, `report.js`, `tables.js`, and `schema.js` are UMD-style
+(`module.exports` under Node, `window.Pog*` in a browser), so the exact same
+code that runs on the page also runs under the test suite.
 
 This is a browser port of a local Python pipeline (`parse_dice.py` /
 `build_report.py`) that does the same thing from the command line — the two
@@ -75,7 +85,8 @@ game data) covering all five roll categories plus a couple of edge cases
 that have broken this parser before (a mandated-offensive roll whose
 outcome text contains a card link instead of plain text; a siege roll
 whose modifier/result use a Unicode minus sign `−` rather than an ASCII
-hyphen). Run it after any change to `js/parser.js` or `js/report.js`.
+hyphen). Run it after any change to `js/parser.js`, `js/report.js`,
+`js/tables.js`, or `js/schema.js`.
 
 ## Deploying
 

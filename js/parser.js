@@ -1,8 +1,9 @@
 /**
- * Parse Paths of Glory game-log HTML into an array of per-roll row objects.
- * Direct port of parse_dice.py — see that file (and PROCESS.md) in
- * ~/paths_of_glory_dice_analysis/ for the reference implementation and the
- * reasoning behind each pattern. Keep the two in sync when either changes.
+ * Parse Paths of Glory game-log HTML into an array of per-roll row objects,
+ * plus a `combats` array that groups each combat's attacker/defender fire,
+ * flank attempt, and retreat into one record (used by the report's
+ * expected-vs-actual stats and by the JSON export), and best-effort game
+ * metadata (game id, player names) pulled from outside the log div itself.
  *
  * Pure function, no DOM dependency — works identically in a browser
  * <script> tag (exposes `window.PogParser`) or under Node (`require`),
@@ -12,21 +13,29 @@
   "use strict";
 
   // --- context-setting patterns (checked before the generic die pattern) ---
-  var TURN_RE      = '<div class="h1">Turn (\\d+)';
-  var ACTION_RE    = '<div class="h3 (cp|ap)">Turn \\d+ – Action (\\d+)</div>';
-  var H4_RE        = '<div class="h4 group (cp|ap)"><span class="spacetip">([^<]+)</span></div>';
-  var MANDATED_HDR = '<div>Mandated offensives:</div>';
-  var MO_LINE_RE   = '<div>(CP|AP): <span class="die (cp|ap) d(\\d)"></span> → (.*?)</div>';
-  var ATT_FIRE_RE  = '<div class="group (cp|ap)">Attacker\'s fire \\((\\d+) CF\\):</div>';
-  var DEF_FIRE_RE  = '<div class="group (cp|ap)">Defender\'s fire \\((\\d+) CF\\):</div>';
-  var ENTRENCH_RE  = '<div>Entrench attempt in <span class="spacetip">([^<]+)</span></div>';
-  var FLANK_RE     = '<div class="group (cp|ap)">Flank attempt:</div>';
-  var SIEGE_HDR_RE = '<div>Siege at <span class="spacetip">([^<]+)</span> \\((\\d+) CF\\):';
-  var DIE_RE       = '<span class="die (ap|cp) d(\\d)"></span>([^<]*)';
+  var TURN_RE       = '<div class="h1">Turn (\\d+)';
+  var ACTION_RE     = '<div class="h3 (cp|ap)">Turn \\d+ – Action (\\d+)</div>';
+  var H4_RE         = '<div class="h4 group (cp|ap)"><span class="spacetip">([^<]+)</span></div>';
+  var MANDATED_HDR  = '<div>Mandated offensives:</div>';
+  var MO_LINE_RE    = '<div>(CP|AP): <span class="die (cp|ap) d(\\d)"></span> → (.*?)</div>';
+  var ATT_FIRE_RE   = '<div class="group (cp|ap)">Attacker\'s fire \\((\\d+) CF\\):</div>';
+  var DEF_FIRE_RE   = '<div class="group (cp|ap)">Defender\'s fire \\((\\d+) CF\\):</div>';
+  var VICTORY_RE    = '<div class="bold group (?:cp|ap)">(\\d+):(\\d+) (?:(attacker|defender) victory|no combat winner)</div>';
+  var RETREAT_RE    = '<div class="group (?:cp|ap)">Retreat( canceled)?:</div>';
+  var ENTRENCH_UNIT_RE = '<div class="i"><span class="piecetip (?:ap|cp)-unit"[^>]*>([^<]+)</span> entrench</div>';
+  var ENTRENCH_RE   = '<div>Entrench attempt in <span class="spacetip">([^<]+)</span></div>';
+  var FLANK_RE      = '<div class="group (cp|ap)">Flank attempt:</div>';
+  var FLANK_MOD_RE  = '<div class="i(?: group (?:cp|ap))?">([+−-]\\d+) <span class="spacetip">[^<]+</span></div>';
+  var COLUMN_SHIFT_RE = '<div class="i group (?:cp|ap)">(\\d+)([LR]) for ([^<]+)</div>';
+  var DIE_MOD_RE    = '<div class="i group (?:cp|ap)">([+−-]\\d+) <span class="cardtip (?:cp|ap)-card"[^>]*>([^<]+)</span></div>';
+  var SIEGE_HDR_RE  = '<div>Siege at <span class="spacetip">([^<]+)</span> \\((\\d+) CF\\):';
+  var SIEGE_RESULT_RE = '<div class="i">(Fort holds|Fort destroyed)</div>';
+  var DIE_RE        = '<span class="die (ap|cp) d(\\d)"></span>([^<]*)';
 
   var COMBINED = new RegExp(
     [TURN_RE, ACTION_RE, H4_RE, MANDATED_HDR, MO_LINE_RE,
-     ATT_FIRE_RE, DEF_FIRE_RE, ENTRENCH_RE, FLANK_RE, SIEGE_HDR_RE, DIE_RE].join("|"),
+     ATT_FIRE_RE, DEF_FIRE_RE, VICTORY_RE, RETREAT_RE, ENTRENCH_UNIT_RE, ENTRENCH_RE,
+     FLANK_RE, FLANK_MOD_RE, COLUMN_SHIFT_RE, DIE_MOD_RE, SIEGE_HDR_RE, SIEGE_RESULT_RE, DIE_RE].join("|"),
     "g"
   );
 
@@ -40,6 +49,12 @@
   // Both signed-number groups below must accept it, and the captured value
   // must be normalized to an ASCII "-" so downstream numeric parsing works.
   function normalizeMinus(s) { return s.replace(/−/g, "-"); }
+
+  /** "GE 3" / "(GE 2)" / "RU CAU" / "GEc" / "TU YLD" -> "GE" / "RU" / "TU". */
+  function nationalityOf(pieceName) {
+    var m = pieceName.match(/^\(?([A-Z]{2,3})/);
+    return m ? m[1] : "";
+  }
 
   function parseTrail(trailRaw) {
     var trail = trailRaw.trim();
@@ -59,11 +74,27 @@
     return { modifier: modifier, effective: effective, outcome: outcome };
   }
 
+  /** Best-effort game id + player names, pulled from outside the log div (URL comment, chat log). */
+  function parseMeta(rawText) {
+    var meta = { gameId: "", apPlayer: "", cpPlayer: "" };
+    var gm = rawText.match(/[?&]game=(\d+)/);
+    if (gm) meta.gameId = gm[1];
+    var userRe = /class="user (Central_Powers|Allied_Powers) player_\d+">([^<]+)<\/span>/g;
+    var um;
+    while ((um = userRe.exec(rawText))) {
+      if (um[1] === "Central_Powers" && !meta.cpPlayer) meta.cpPlayer = um[2];
+      if (um[1] === "Allied_Powers" && !meta.apPlayer) meta.apPlayer = um[2];
+      if (meta.cpPlayer && meta.apPlayer) break;
+    }
+    return meta;
+  }
+
   /**
    * @param {string} rawText - a full Rally page save, or just a <div id="log">...</div> excerpt.
-   * @returns {{rows: Array<Object>, unknownCount: number}}
+   * @returns {{rows: Array<Object>, unknownCount: number, combats: Array<Object>, meta: Object}}
    */
   function parseLog(rawText) {
+    var meta = parseMeta(rawText);
     var text = rawText;
 
     // Extract just <div id="log">...</div> if this is a full page save
@@ -91,17 +122,30 @@
     var MO_LINE_M = new RegExp("^" + MO_LINE_RE);
     var ATT_FIRE_M = new RegExp("^" + ATT_FIRE_RE);
     var DEF_FIRE_M = new RegExp("^" + DEF_FIRE_RE);
+    var VICTORY_M = new RegExp("^" + VICTORY_RE);
+    var RETREAT_M = new RegExp("^" + RETREAT_RE);
+    var ENTRENCH_UNIT_M = new RegExp("^" + ENTRENCH_UNIT_RE);
     var ENTRENCH_M = new RegExp("^" + ENTRENCH_RE);
+    var FLANK_MOD_M = new RegExp("^" + FLANK_MOD_RE);
+    var COLUMN_SHIFT_M = new RegExp("^" + COLUMN_SHIFT_RE);
+    var DIE_MOD_M = new RegExp("^" + DIE_MOD_RE);
     var SIEGE_HDR_M = new RegExp("^" + SIEGE_HDR_RE);
+    var SIEGE_RESULT_M = new RegExp("^" + SIEGE_RESULT_RE);
     var DIE_M = new RegExp("^" + DIE_RE);
 
     var rows = [];
+    var combats = [], combatsByKey = {};
     var turn = null, actionNum = null;
-    var combatSpace = null;
+    var combatSpace = null, currentCombat = null;
     var pendingFire = null; // {role, cf}
-    var pendingEntrenchSpace = null;
+    var pendingFireShift = 0, pendingFireShiftReasons = []; // net column shift (R=+, L=-) accumulated between the fire header and its die
+    var pendingFireDieMod = 0, pendingFireDieModReasons = []; // net die-roll modifier (e.g. "+1 Flamethrowers") accumulated the same way
+    var pendingEntrench = null; // {space, nationality}
+    var pendingEntrenchNationality = "";
     var pendingFlank = false;
+    var pendingFlankModifier = "";
     var pendingSiegeSpace = null;
+    var pendingSiegeRowIndex = null;
 
     COMBINED.lastIndex = 0;
     var m;
@@ -109,14 +153,21 @@
       var g = m[0];
       if (g.indexOf('<div class="h1">Turn') === 0) {
         turn = parseInt(g.match(TURN_M)[1], 10);
-        actionNum = null; combatSpace = null;
+        actionNum = null; combatSpace = null; currentCombat = null;
       } else if (g.indexOf('<div class="h3') === 0) {
         var am = g.match(ACTION_M);
         actionNum = parseInt(am[2], 10);
-        combatSpace = null;
+        combatSpace = null; currentCombat = null;
       } else if (g.indexOf('<div class="h4') === 0) {
         var hm = g.match(H4_M);
         combatSpace = hm[2];
+        var key = turn + "|" + actionNum + "|" + combatSpace;
+        if (!combatsByKey[key]) {
+          combatsByKey[key] = { turn: turn, action: actionNum, location: combatSpace,
+            attacker: null, defender: null, flank_attempt: null, retreat: null };
+          combats.push(combatsByKey[key]);
+        }
+        currentCombat = combatsByKey[key];
       } else if (g.indexOf("<div>Mandated offensives:") === 0) {
         // no-op, just a marker in the source
       } else if (g.indexOf("<div>CP:") === 0 || g.indexOf("<div>AP:") === 0) {
@@ -124,48 +175,115 @@
         var outcome = stripTags(mo[4]).trim();
         rows.push({ turn: turn, action: 0, side: mo[2], category: "mandated_offensive",
                     role: "", space: "", raw_value: parseInt(mo[3], 10), modifier: "",
-                    effective_value: "", outcome: outcome });
+                    effective_value: "", outcome: outcome, force_type: "", nationality: "" });
       } else if (g.indexOf('<div class="group') === 0 && g.indexOf("Attacker's fire") !== -1) {
         var af = g.match(ATT_FIRE_M);
         pendingFire = { role: "attacker", cf: parseInt(af[2], 10) };
+        pendingFireShift = 0; pendingFireShiftReasons = [];
+        pendingFireDieMod = 0; pendingFireDieModReasons = [];
       } else if (g.indexOf('<div class="group') === 0 && g.indexOf("Defender's fire") !== -1) {
         var df = g.match(DEF_FIRE_M);
         pendingFire = { role: "defender", cf: parseInt(df[2], 10) };
+        pendingFireShift = 0; pendingFireShiftReasons = [];
+        pendingFireDieMod = 0; pendingFireDieModReasons = [];
+      } else if (pendingFire !== null && COLUMN_SHIFT_M.test(g)) {
+        var csm = g.match(COLUMN_SHIFT_M);
+        var amount = parseInt(csm[1], 10) * (csm[2] === "L" ? -1 : 1);
+        pendingFireShift += amount;
+        pendingFireShiftReasons.push(csm[1] + csm[2] + " for " + csm[3]);
+      } else if (pendingFire !== null && DIE_MOD_M.test(g)) {
+        // A combat card can add straight to the die roll itself (before the ×CF lookup),
+        // separate from — and stacking with — any column shift above. Verified against a
+        // real game: raw roll + this modifier (clamped 1-6) is the row the CRT lookup
+        // actually used in every case checked.
+        var dmm = g.match(DIE_MOD_M);
+        pendingFireDieMod += parseInt(normalizeMinus(dmm[1]), 10);
+        pendingFireDieModReasons.push(normalizeMinus(dmm[1]) + " " + dmm[2]);
+      } else if (g.indexOf('<div class="bold group') === 0) {
+        var vm = g.match(VICTORY_M);
+        if (currentCombat) {
+          currentCombat.actual = { attacker_value: parseInt(vm[1], 10), defender_value: parseInt(vm[2], 10),
+                                    winner: vm[3] || "tie" };
+        }
+      } else if (g.indexOf('<div class="group') === 0 && /Retreat( canceled)?:<\/div>$/.test(g)) {
+        var rm = g.match(RETREAT_M);
+        if (currentCombat) {
+          currentCombat.retreat = currentCombat.retreat || { forced: false, canceled: false };
+          if (rm[1]) currentCombat.retreat.canceled = true; else currentCombat.retreat.forced = true;
+        }
+      } else if (g.indexOf('<div class="i"><span class="piecetip') === 0 && g.indexOf(" entrench</div>") !== -1) {
+        var eum = g.match(ENTRENCH_UNIT_M);
+        pendingEntrenchNationality = nationalityOf(eum[1]);
       } else if (g.indexOf("<div>Entrench attempt in") === 0) {
-        pendingEntrenchSpace = g.match(ENTRENCH_M)[1];
+        pendingEntrench = { space: g.match(ENTRENCH_M)[1], nationality: pendingEntrenchNationality };
+        pendingEntrenchNationality = "";
       } else if (g.indexOf('<div class="group') === 0 && g.indexOf("Flank attempt:") !== -1) {
         pendingFlank = true;
+        pendingFlankModifier = "";
+      } else if (pendingFlank && /^<div class="i(?: group (?:cp|ap))?">[+−-]\d+ <span class="spacetip">/.test(g)) {
+        var fmm = g.match(FLANK_MOD_M);
+        pendingFlankModifier = normalizeMinus(fmm[1]);
       } else if (g.indexOf("<div>Siege at") === 0) {
-        pendingSiegeSpace = g.match(SIEGE_HDR_M)[1];
+        var sh = g.match(SIEGE_HDR_M);
+        pendingSiegeSpace = { space: sh[1], cf: parseInt(sh[2], 10) };
+      } else if (g.indexOf('<div class="i">Fort') === 0) {
+        var srm = g.match(SIEGE_RESULT_M);
+        if (pendingSiegeRowIndex !== null) {
+          rows[pendingSiegeRowIndex].outcome = srm[1] === "Fort destroyed" ? "Success" : "Fail";
+          pendingSiegeRowIndex = null;
+        }
       } else {
         // a die roll
         var dm = g.match(DIE_M);
         var side = dm[1], raw = parseInt(dm[2], 10), trail = dm[3];
         var pt = parseTrail(trail);
         if (pendingFire !== null) {
+          // `modifier` (via parseTrail's "×CF" branch) is always "" — a combat card's roll
+          // bonus doesn't appear inline in the die's own trailing text, it's the separate
+          // "+N <card>" line accumulated into pendingFireDieMod above (see DIE_MOD_RE).
           rows.push({ turn: turn, action: actionNum, side: side, category: "combat_fire",
                       role: pendingFire.role, space: combatSpace || "", raw_value: raw,
-                      modifier: pt.modifier, effective_value: pt.effective, outcome: "cf=" + pendingFire.cf });
+                      modifier: pt.modifier, effective_value: pt.effective, outcome: "cf=" + pendingFire.cf,
+                      force_type: pt.outcome, nationality: "",
+                      column_shift: pendingFireShift, shift_reasons: pendingFireShiftReasons.join(", "),
+                      die_modifier: pendingFireDieMod, die_modifier_reasons: pendingFireDieModReasons.join(", ") });
+          if (currentCombat) {
+            currentCombat[pendingFire.role] = { side: side, raw_value: raw, effective_value: pt.effective,
+              force_type: pt.outcome, cf: pendingFire.cf,
+              column_shift: pendingFireShift, shift_reasons: pendingFireShiftReasons.slice(),
+              die_modifier: pendingFireDieMod, die_modifier_reasons: pendingFireDieModReasons.slice() };
+          }
           pendingFire = null;
-        } else if (pendingEntrenchSpace !== null) {
+          pendingFireShift = 0; pendingFireShiftReasons = [];
+          pendingFireDieMod = 0; pendingFireDieModReasons = [];
+        } else if (pendingEntrench !== null) {
           rows.push({ turn: turn, action: actionNum, side: side, category: "entrench",
-                      role: "", space: pendingEntrenchSpace, raw_value: raw,
-                      modifier: pt.modifier, effective_value: pt.effective, outcome: pt.outcome });
-          pendingEntrenchSpace = null;
+                      role: "", space: pendingEntrench.space, raw_value: raw,
+                      modifier: pt.modifier, effective_value: pt.effective, outcome: pt.outcome,
+                      force_type: "", nationality: pendingEntrench.nationality });
+          pendingEntrench = null;
         } else if (pendingFlank) {
           rows.push({ turn: turn, action: actionNum, side: side, category: "flank",
                       role: "", space: combatSpace || "", raw_value: raw,
-                      modifier: pt.modifier, effective_value: pt.effective, outcome: pt.outcome });
+                      modifier: pendingFlankModifier, effective_value: pt.effective, outcome: pt.outcome,
+                      force_type: "", nationality: "" });
+          if (currentCombat) {
+            currentCombat.flank_attempt = { side: side, modifier: pendingFlankModifier, raw_value: raw, result: pt.outcome };
+          }
           pendingFlank = false;
+          pendingFlankModifier = "";
         } else if (pendingSiegeSpace !== null) {
           rows.push({ turn: turn, action: actionNum, side: side, category: "siege",
-                      role: "", space: pendingSiegeSpace, raw_value: raw,
-                      modifier: pt.modifier, effective_value: pt.effective, outcome: pt.outcome });
+                      role: "", space: pendingSiegeSpace.space, raw_value: raw,
+                      modifier: pt.modifier, effective_value: pt.effective, outcome: pt.outcome,
+                      force_type: "", nationality: "", target_cf: pendingSiegeSpace.cf });
+          pendingSiegeRowIndex = rows.length - 1;
           pendingSiegeSpace = null;
         } else {
           rows.push({ turn: turn, action: actionNum, side: side, category: "unknown",
                       role: "", space: combatSpace || "", raw_value: raw,
-                      modifier: pt.modifier, effective_value: pt.effective, outcome: pt.outcome });
+                      modifier: pt.modifier, effective_value: pt.effective, outcome: pt.outcome,
+                      force_type: "", nationality: "" });
         }
       }
     }
@@ -176,19 +294,23 @@
     for (var i = 0; i < rows.length; i++) {
       var r = rows[i];
       if (r.category === "entrench") {
-        var key = r.side + "|" + r.space;
-        entSeen[key] = (entSeen[key] || 0) + 1;
-        r.entrench_attempt_no = entSeen[key];
+        var ekey = r.side + "|" + r.space;
+        entSeen[ekey] = (entSeen[ekey] || 0) + 1;
+        r.entrench_attempt_no = entSeen[ekey];
       } else {
         r.entrench_attempt_no = "";
       }
     }
 
+    // drop any combat shells that never got both an attacker and a defender
+    // fire roll (e.g. a flank attempt that ended the combat before return fire)
+    combats = combats.filter(function (c) { return c.attacker && c.defender; });
+
     var unknownCount = rows.filter(function (r) { return r.category === "unknown"; }).length;
-    return { rows: rows, unknownCount: unknownCount };
+    return { rows: rows, unknownCount: unknownCount, combats: combats, meta: meta };
   }
 
-  var api = { parseLog: parseLog, parseTrail: parseTrail };
+  var api = { parseLog: parseLog, parseTrail: parseTrail, nationalityOf: nationalityOf };
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   } else {
