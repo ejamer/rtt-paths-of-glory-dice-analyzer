@@ -56,7 +56,11 @@
       <button class="download-btn" id="download-json">⬇ Download JSON (raw data)</button>
       <button class="download-btn" id="download-report">⬇ Download report.html</button>
     </div>
-    <iframe id="report-frame" title="Dice analysis report"></iframe>
+    <!-- scrolling="no": app.js keeps this iframe's height matched to its content, so it should
+         never need to scroll internally — without this, some browsers/OSes (classic non-overlay
+         scrollbars, or macOS set to "Always show scrollbars") reserve a scrollbar gutter on the
+         iframe's own embedded viewport regardless of whether content actually overflows it. -->
+    <iframe id="report-frame" title="Dice analysis report" scrolling="no"></iframe>
   </section>
 
   <div class="page">
