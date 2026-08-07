@@ -23,8 +23,8 @@ in, then upload that file here.
    the comment above the drop zone in `index.html` for why).
 3. Drop the resulting `.htm` file onto the page (the `<pagename>_files/`
    folder saved alongside it is never read — safe to ignore).
-4. View the report inline, or download the cleaned CSV, the raw parsed data
-   as JSON, or a standalone copy of the report HTML.
+4. View the report inline, or download the raw parsed data as JSON, or a
+   standalone copy of the report HTML.
 
 ## How it's built
 
@@ -49,10 +49,9 @@ framework:
 - `js/schema.js` — the same parsed data reshaped into the nested per-event
   JSON export described in `methodology.md` (game metadata, combat results,
   entrench/siege/mandated-offensive rolls).
-- `js/csv.js` — the row objects as a downloadable CSV.
 - `js/app.js` — the only browser-specific file: wires up the upload/drop
-  zone, renders the report into an `<iframe srcdoc>`, and the three download
-  buttons (CSV, JSON, report HTML).
+  zone, renders the report into an `<iframe srcdoc>`, and the two download
+  buttons (JSON, report HTML).
 
 `parser.js`, `report.js`, `tables.js`, and `schema.js` are UMD-style
 (`module.exports` under Node, `window.Pog*` in a browser), so the exact same

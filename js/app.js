@@ -11,11 +11,9 @@
   var warning = document.getElementById("warning");
   var resultsSection = document.getElementById("results");
   var reportFrame = document.getElementById("report-frame");
-  var downloadCsvBtn = document.getElementById("download-csv");
   var downloadJsonBtn = document.getElementById("download-json");
   var downloadReportBtn = document.getElementById("download-report");
 
-  var currentRows = null;
   var currentParsed = null;
   var currentReportHtml = null;
   var currentBaseName = "paths-of-glory";
@@ -89,7 +87,6 @@
             "or its <div id=\"log\">...</div> excerpt)?", true);
           return;
         }
-        currentRows = parsed.rows;
         currentParsed = parsed;
         currentReportHtml = PogReport.buildReportHTML(parsed.rows, parsed.combats, parsed.meta);
         reportFrame.srcdoc = currentReportHtml;
@@ -133,10 +130,6 @@
 
   reportFrame.addEventListener("load", watchReportFrameHeight);
 
-  downloadCsvBtn.addEventListener("click", function () {
-    if (!currentRows) return;
-    downloadText(PogCsv.rowsToCsv(currentRows), currentBaseName + " - dice_rolls.csv", "text/csv");
-  });
   downloadJsonBtn.addEventListener("click", function () {
     if (!currentParsed) return;
     var json = PogSchema.buildGameJSON(currentParsed);
