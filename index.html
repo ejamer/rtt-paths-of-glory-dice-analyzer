@@ -8,6 +8,10 @@
 </head>
 <body>
 <main>
+  <!-- Narrow, readable-line-length column for prose/controls. #results (the report iframe) sits
+       outside this wrapper, directly in <main>, so it can use the full wide layout below —
+       reports have wide tables that need the room; a paragraph of text doesn't. -->
+  <div class="page">
   <h1>Paths of Glory — Dice Analyzer</h1>
   <p class="subtitle">Upload a saved game-log page and see how random the dice really were.</p>
 
@@ -44,6 +48,7 @@
 
   <div class="status" id="status"></div>
   <div class="warning" id="warning" hidden></div>
+  </div>
 
   <section id="results" hidden>
     <div class="download-row">
@@ -54,6 +59,7 @@
     <iframe id="report-frame" title="Dice analysis report"></iframe>
   </section>
 
+  <div class="page">
   <details class="how-it-works">
     <summary>How this works / what it looks for</summary>
     <p>Every die roll in a Rally the Troops <em>Paths of Glory</em> game log is an empty
@@ -77,6 +83,7 @@
     Not affiliated with Rally the Troops or GMT Games. Fully open source —
     <a href="https://github.com/ejamer/rtt-paths-of-glory-dice-analyzer" target="_blank" rel="noopener">code on GitHub</a>.
   </footer>
+  </div>
 </main>
 <script src="js/parser.js"></script>
 <script src="js/tables.js"></script>
