@@ -28,6 +28,9 @@ in, then upload that file here.
 
 ## How it's built
 
+> 🤖 **100% vibe coded with [Claude](https://claude.ai/code).** Every line
+> was written and reviewed by AI.
+
 Zero dependencies, zero build step — plain `<script>` tags, no bundler, no
 framework:
 
