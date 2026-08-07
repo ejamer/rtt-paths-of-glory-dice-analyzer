@@ -72,10 +72,12 @@ how often that expectation was overturned, for either the attacker or
 defender. Win/tie/loss over time is also plotted per side.
 
 The report also shows how many retreats were forced on each side by lost
-combats, and how many of those were canceled (taking extra losses to hold
-the space instead) rather than tracking retreat length — the log doesn't
-state a retreat's length directly, and no reliable way to infer it from the
-unit-movement text was found.
+combats, split by retreat length (1 space vs. 2), and how many were
+canceled (taking extra losses to hold the space instead). The log doesn't
+state a retreat's length directly, so it's derived from the rules formula —
+the loss margin between attacker and defender, capped at 2 spaces — rather
+than the unit-movement text, which doesn't reliably indicate distance
+moved.
 
 Flank attempts let the attacker inflict losses before the defender can
 return fire, so get their own subsection under Combat: how many flank rolls

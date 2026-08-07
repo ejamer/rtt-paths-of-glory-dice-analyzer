@@ -651,9 +651,9 @@
       var att = d.attacker, def = d.defender;
       var expRatio = fmt(d.expAtt, 1) + ":" + fmt(d.expDef, 1);
       return '<tr><td>' + d.turn + '</td><td>' + esc(d.location) + '</td>' +
-        '<td><span class="pill pill-' + att.side + '">' + att.side.toUpperCase() + '</span> ' + att.cf + ' CF (' + att.force_type + ')' + shiftLabel(att) + '</td>' +
+        '<td><span class="pill pill-' + att.side + '">' + att.side.toUpperCase() + '</span> ' + att.cf + ' CF (' + esc(att.force_type) + ')' + shiftLabel(att) + '</td>' +
         '<td>' + att.raw_value + dieModLabel(att) + '</td>' +
-        '<td><span class="pill pill-' + def.side + '">' + def.side.toUpperCase() + '</span> ' + def.cf + ' CF (' + def.force_type + ')' + shiftLabel(def) + '</td>' +
+        '<td><span class="pill pill-' + def.side + '">' + def.side.toUpperCase() + '</span> ' + def.cf + ' CF (' + esc(def.force_type) + ')' + shiftLabel(def) + '</td>' +
         '<td>' + def.raw_value + dieModLabel(def) + '</td>' +
         '<td>' + esc(d.lossRatio) + '</td><td>' + expRatio + '</td>' +
         '<td>' + esc(d.expWinnerSide === "tie" ? "Tie" : SIDE_NAME[d.expWinnerSide]) + '</td></tr>';

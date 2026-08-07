@@ -9,7 +9,10 @@
  * sketch rather than deviating from it outright:
  *   - combat_results is an array (one entry per combat) — the sketch's
  *     singular object was illustrative.
- *   - retreat is `{ forced, canceled }`, not a distance — see methodology.md.
+ *   - retreat is `{ forced, canceled }` here, not a distance — the JSON export sticks to what
+ *     the log states directly. report.js derives a 1-space-vs-2 length for its own retreat
+ *     breakdown (loss margin, capped at 2, per the rules), but that's a display-only stat and
+ *     doesn't get folded back into this export.
  *   - siege_attempt_<#> includes attempting_faction (the besieging side),
  *     which the sketch's siege_rolls entry didn't list but the roll can't be
  *     interpreted without.

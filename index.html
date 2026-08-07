@@ -18,11 +18,24 @@
     from Rally the Troops on your behalf, since that would require it to bypass Rally's login.
   </div>
 
+  <!--
+    Only "Webpage, Complete" (.htm) works here — confirmed by testing all three Chrome save
+    options against the real parser:
+      - "Webpage, HTML Only" (.html) saves the raw HTML the server sends *before* the page's
+        JavaScript runs, so <div id="log"> is present but empty. Same problem as "View Page
+        Source."
+      - "Webpage, Complete" (.htm) captures the live DOM *after* JavaScript has rendered it,
+        so the log is actually populated. This is the one that works.
+      - "Webpage, Single File" (.mhtml) wraps the HTML in a MIME format (quoted-printable/
+        base64 inside email-style headers) that the parser doesn't unwrap.
+    The parser only ever looks at the <div id="log">...</div> portion of whatever it's given
+    (see parser.js), so a full "Complete" page save works as-is — no manual trimming needed.
+  -->
   <div id="drop-zone" tabindex="0">
     <div><strong>Drop a game-log HTML file here, or click to choose one</strong></div>
     <div class="hint">
       Log into your game on Rally the Troops, then File → Save Page As → <strong>"Webpage, Complete"</strong>
-      (this is the one that works — "HTML Only" and "Single File" don't capture the game data; see the README).
+      (this is the one that works — "HTML Only" and "Single File" don't capture the game data).
       Drop the resulting <code>.htm</code> file here — you can ignore the <code>_files</code> folder saved
       alongside it.
     </div>
