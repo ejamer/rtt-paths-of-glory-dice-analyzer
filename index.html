@@ -8,6 +8,10 @@
 </head>
 <body>
 <main>
+  <!-- Narrow, readable-line-length column for prose/controls. #results (the report iframe) sits
+       outside this wrapper, directly in <main>, so it can use the full wide layout below —
+       reports have wide tables that need the room; a paragraph of text doesn't. -->
+  <div class="page">
   <h1>Paths of Glory — Dice Analyzer</h1>
   <p class="subtitle">Upload a saved game-log page and see how random the dice really were.</p>
 
@@ -18,11 +22,24 @@
     from Rally the Troops on your behalf, since that would require it to bypass Rally's login.
   </div>
 
+  <!--
+    Only "Webpage, Complete" (.htm) works here — confirmed by testing all three Chrome save
+    options against the real parser:
+      - "Webpage, HTML Only" (.html) saves the raw HTML the server sends *before* the page's
+        JavaScript runs, so <div id="log"> is present but empty. Same problem as "View Page
+        Source."
+      - "Webpage, Complete" (.htm) captures the live DOM *after* JavaScript has rendered it,
+        so the log is actually populated. This is the one that works.
+      - "Webpage, Single File" (.mhtml) wraps the HTML in a MIME format (quoted-printable/
+        base64 inside email-style headers) that the parser doesn't unwrap.
+    The parser only ever looks at the <div id="log">...</div> portion of whatever it's given
+    (see parser.js), so a full "Complete" page save works as-is — no manual trimming needed.
+  -->
   <div id="drop-zone" tabindex="0">
     <div><strong>Drop a game-log HTML file here, or click to choose one</strong></div>
     <div class="hint">
       Log into your game on Rally the Troops, then File → Save Page As → <strong>"Webpage, Complete"</strong>
-      (this is the one that works — "HTML Only" and "Single File" don't capture the game data; see the README).
+      (this is the one that works — "HTML Only" and "Single File" don't capture the game data).
       Drop the resulting <code>.htm</code> file here — you can ignore the <code>_files</code> folder saved
       alongside it.
     </div>
@@ -31,16 +48,21 @@
 
   <div class="status" id="status"></div>
   <div class="warning" id="warning" hidden></div>
+  </div>
 
   <section id="results" hidden>
     <div class="download-row">
-      <button class="download-btn" id="download-csv">⬇ Download CSV (cleaned data)</button>
       <button class="download-btn" id="download-json">⬇ Download JSON (raw data)</button>
       <button class="download-btn" id="download-report">⬇ Download report.html</button>
     </div>
-    <iframe id="report-frame" title="Dice analysis report"></iframe>
+    <!-- scrolling="no": app.js keeps this iframe's height matched to its content, so it should
+         never need to scroll internally — without this, some browsers/OSes (classic non-overlay
+         scrollbars, or macOS set to "Always show scrollbars") reserve a scrollbar gutter on the
+         iframe's own embedded viewport regardless of whether content actually overflows it. -->
+    <iframe id="report-frame" title="Dice analysis report" scrolling="no"></iframe>
   </section>
 
+  <div class="page">
   <details class="how-it-works">
     <summary>How this works / what it looks for</summary>
     <p>Every die roll in a Rally the Troops <em>Paths of Glory</em> game log is an empty
@@ -64,12 +86,12 @@
     Not affiliated with Rally the Troops or GMT Games. Fully open source —
     <a href="https://github.com/ejamer/rtt-paths-of-glory-dice-analyzer" target="_blank" rel="noopener">code on GitHub</a>.
   </footer>
+  </div>
 </main>
 <script src="js/parser.js"></script>
 <script src="js/tables.js"></script>
 <script src="js/report.js"></script>
 <script src="js/schema.js"></script>
-<script src="js/csv.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

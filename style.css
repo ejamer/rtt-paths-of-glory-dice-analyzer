@@ -10,7 +10,10 @@ body {
   margin: 0; background: var(--bg); color: var(--text);
   font-family: -apple-system, "Segoe UI", Roboto, sans-serif; line-height: 1.5;
 }
-main { max-width: 900px; margin: 0 auto; padding: 32px 20px 80px; }
+/* main is the wide outer bound (mainly so #results/#report-frame have room for wide tables);
+   .page re-narrows everything else back to a readable line length. */
+main { max-width: 1300px; margin: 0 auto; padding: 32px 20px 80px; }
+.page { max-width: 900px; margin: 0 auto; }
 h1 { font-size: 1.7rem; margin-bottom: 4px; }
 p.subtitle { color: var(--muted); margin-top: 0; }
 .privacy-note {
@@ -43,8 +46,15 @@ button.download-btn {
 }
 button.download-btn:hover { border-color: var(--accent); }
 
+/* Height is set from JS (app.js's watchReportFrameHeight) to match the report's actual content
+   height, so the page has one scrollbar instead of the iframe growing its own on top of it.
+   min-height is just the pre-JS/no-JS fallback so the frame isn't a zero-height sliver.
+   overflow:hidden backs up the HTML scrolling="no" attribute on the element itself — since the
+   height is always kept in sync with the content, this frame should never need to scroll on its
+   own, and some browsers otherwise reserve a scrollbar gutter regardless of actual overflow. */
 #report-frame {
-  width: 100%; height: 2600px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel);
+  display: block; width: 100%; min-height: 400px; overflow: hidden;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--panel);
 }
 
 details.how-it-works { margin-top: 40px; font-size: 0.9rem; color: var(--muted); }

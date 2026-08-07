@@ -18,26 +18,13 @@ in, then upload that file here.
 
 1. Open the game on Rally the Troops while logged in.
 2. Save the page as **Webpage, Complete** (Chrome: File → Save Page As →
-   format dropdown → "Webpage, Complete"). This is the only save option
-   that works — see below.
+   format dropdown → "Webpage, Complete"). This is the only save option that
+   works — "HTML Only" and "Single File" don't capture the rendered log (see
+   the comment above the drop zone in `index.html` for why).
 3. Drop the resulting `.htm` file onto the page (the `<pagename>_files/`
    folder saved alongside it is never read — safe to ignore).
-4. View the report inline, or download the cleaned CSV, the raw parsed data
-   as JSON, or a standalone copy of the report HTML.
-
-### Why "Webpage, Complete" specifically
-
-Confirmed by testing all three Chrome save options against the real parser:
-
-| Save option | Extension | Works? | Why |
-|---|---|---|---|
-| Webpage, HTML Only | `.html` | ❌ | Saves the raw HTML the server sends *before* the page's JavaScript runs — `<div id="log">` is present but empty. Same problem as "View Page Source." |
-| **Webpage, Complete** | `.htm` | ✅ | Captures the live DOM *after* JavaScript has rendered it, so the log is actually populated. |
-| Webpage, Single File | `.mhtml` | ❌ | MHTML is a MIME-wrapped format (quoted-printable/base64 inside email-style headers), not plain HTML — the parser doesn't unwrap it. |
-
-The parser only ever looks at the `<div id="log">...</div>` portion of
-whatever you give it, so a full "Complete" page save works as-is — no
-manual trimming needed.
+4. View the report inline, or download the raw parsed data as JSON, or a
+   standalone copy of the report HTML.
 
 ## How it's built
 
@@ -62,10 +49,9 @@ framework:
 - `js/schema.js` — the same parsed data reshaped into the nested per-event
   JSON export described in `methodology.md` (game metadata, combat results,
   entrench/siege/mandated-offensive rolls).
-- `js/csv.js` — the row objects as a downloadable CSV.
 - `js/app.js` — the only browser-specific file: wires up the upload/drop
-  zone, renders the report into an `<iframe srcdoc>`, and the three download
-  buttons (CSV, JSON, report HTML).
+  zone, renders the report into an `<iframe srcdoc>`, and the two download
+  buttons (JSON, report HTML).
 
 `parser.js`, `report.js`, `tables.js`, and `schema.js` are UMD-style
 (`module.exports` under Node, `window.Pog*` in a browser), so the exact same

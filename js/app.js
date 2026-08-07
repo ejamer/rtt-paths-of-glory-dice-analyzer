@@ -11,14 +11,38 @@
   var warning = document.getElementById("warning");
   var resultsSection = document.getElementById("results");
   var reportFrame = document.getElementById("report-frame");
-  var downloadCsvBtn = document.getElementById("download-csv");
   var downloadJsonBtn = document.getElementById("download-json");
   var downloadReportBtn = document.getElementById("download-report");
 
-  var currentRows = null;
   var currentParsed = null;
   var currentReportHtml = null;
   var currentBaseName = "paths-of-glory";
+  var reportHeightObserver = null;
+
+  /** Size #report-frame to its content's actual height instead of scrolling internally — a
+   * fixed iframe height would either clip taller reports (double scrollbar: page + iframe) or
+   * leave a blank gap under shorter ones. srcdoc content is same-origin to the parent, so
+   * contentWindow.document is reachable synchronously once the iframe fires "load". A
+   * ResizeObserver on top of that catches height changes *after* load too — expanding one of
+   * the report's own <details class="cat-table"> blocks resizes the document without firing
+   * "load" again, and this needs to track that just as much as the initial size.
+   *
+   * The iframe itself has scrolling="no" (see index.html/style.css) so it never shows a
+   * scrollbar of its own — but that also means undershooting this height by even a subpixel
+   * would silently clip content instead of just scrolling, so pad it a couple px above what
+   * scrollHeight (which rounds down) reports. */
+  function watchReportFrameHeight() {
+    if (reportHeightObserver) { reportHeightObserver.disconnect(); reportHeightObserver = null; }
+    var doc;
+    try { doc = reportFrame.contentWindow && reportFrame.contentWindow.document; } catch (e) { return; }
+    if (!doc || !doc.documentElement) return;
+    var resize = function () { reportFrame.style.height = (doc.documentElement.scrollHeight + 2) + "px"; };
+    resize();
+    if (typeof ResizeObserver === "function") {
+      reportHeightObserver = new ResizeObserver(resize);
+      reportHeightObserver.observe(doc.documentElement);
+    }
+  }
 
   function setStatus(msg, isError) {
     status.textContent = msg;
@@ -63,7 +87,6 @@
             "or its <div id=\"log\">...</div> excerpt)?", true);
           return;
         }
-        currentRows = parsed.rows;
         currentParsed = parsed;
         currentReportHtml = PogReport.buildReportHTML(parsed.rows, parsed.combats, parsed.meta);
         reportFrame.srcdoc = currentReportHtml;
@@ -105,14 +128,12 @@
   });
   dropZone.addEventListener("click", function () { fileInput.click(); });
 
-  downloadCsvBtn.addEventListener("click", function () {
-    if (!currentRows) return;
-    downloadText(PogCsv.rowsToCsv(currentRows), currentBaseName + " - dice_rolls.csv", "text/csv");
-  });
+  reportFrame.addEventListener("load", watchReportFrameHeight);
+
   downloadJsonBtn.addEventListener("click", function () {
     if (!currentParsed) return;
     var json = PogSchema.buildGameJSON(currentParsed);
-    downloadText(JSON.stringify(json, null, 2), currentBaseName + " - data.json", "application/json");
+    downloadText(PogSchema.stringifyGameJSON(json), currentBaseName + " - data.json", "application/json");
   });
   downloadReportBtn.addEventListener("click", function () {
     if (!currentReportHtml) return;

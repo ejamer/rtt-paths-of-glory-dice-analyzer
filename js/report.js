@@ -651,9 +651,9 @@
       var att = d.attacker, def = d.defender;
       var expRatio = fmt(d.expAtt, 1) + ":" + fmt(d.expDef, 1);
       return '<tr><td>' + d.turn + '</td><td>' + esc(d.location) + '</td>' +
-        '<td><span class="pill pill-' + att.side + '">' + att.side.toUpperCase() + '</span> ' + att.cf + ' CF (' + att.force_type + ')' + shiftLabel(att) + '</td>' +
+        '<td><span class="pill pill-' + att.side + '">' + att.side.toUpperCase() + '</span> ' + att.cf + ' CF (' + esc(att.force_type) + ')' + shiftLabel(att) + '</td>' +
         '<td>' + att.raw_value + dieModLabel(att) + '</td>' +
-        '<td><span class="pill pill-' + def.side + '">' + def.side.toUpperCase() + '</span> ' + def.cf + ' CF (' + def.force_type + ')' + shiftLabel(def) + '</td>' +
+        '<td><span class="pill pill-' + def.side + '">' + def.side.toUpperCase() + '</span> ' + def.cf + ' CF (' + esc(def.force_type) + ')' + shiftLabel(def) + '</td>' +
         '<td>' + def.raw_value + dieModLabel(def) + '</td>' +
         '<td>' + esc(d.lossRatio) + '</td><td>' + expRatio + '</td>' +
         '<td>' + esc(d.expWinnerSide === "tie" ? "Tie" : SIDE_NAME[d.expWinnerSide]) + '</td></tr>';
@@ -1003,7 +1003,27 @@
       '<footer>\nGenerated entirely in your browser — no file was uploaded anywhere. ' + rows.length + ' rows parsed' +
       (combats.length ? ', ' + combats.length + ' combats resolved' : '') + '.\n' +
       'Raw d6 value is always the physical roll; "modifier"/"effective" reflect in-game bonuses/penalties applied on top.\n' +
-      '</footer>\n</main>\n</body></html>';
+      '</footer>\n</main>\n' +
+      // This report is normally embedded via <iframe srcdoc>, whose document URL is
+      // "about:srcdoc" — but browsers resolve a plain href="#combat" against the *parent
+      // page's* URL, not that. Clicking the TOC then isn't a same-document fragment
+      // scroll: it's a real navigation to "<parent page URL>#combat", which the iframe
+      // dutifully fetches, replacing the report with a fresh copy of the app shell (the
+      // upload prompt). Intercept in-page anchor clicks and scroll manually instead of
+      // letting the browser resolve/navigate them at all.
+      '<script>\n' +
+      '(function () {\n' +
+      '  document.addEventListener("click", function (e) {\n' +
+      '    var a = e.target.closest("a[href^=\\"#\\"]");\n' +
+      '    if (!a || a.getAttribute("href").length < 2) return;\n' +
+      '    var target = document.getElementById(a.getAttribute("href").slice(1));\n' +
+      '    if (!target) return;\n' +
+      '    e.preventDefault();\n' +
+      '    target.scrollIntoView({ behavior: "smooth", block: "start" });\n' +
+      '  });\n' +
+      '})();\n' +
+      '</script>\n' +
+      '</body></html>';
   }
 
   var api = { buildStats: buildStats, buildReportHTML: buildReportHTML, SIDES: SIDES, CATS: CATS, CAT_NAME: CAT_NAME };
