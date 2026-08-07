@@ -1003,7 +1003,27 @@
       '<footer>\nGenerated entirely in your browser — no file was uploaded anywhere. ' + rows.length + ' rows parsed' +
       (combats.length ? ', ' + combats.length + ' combats resolved' : '') + '.\n' +
       'Raw d6 value is always the physical roll; "modifier"/"effective" reflect in-game bonuses/penalties applied on top.\n' +
-      '</footer>\n</main>\n</body></html>';
+      '</footer>\n</main>\n' +
+      // This report is normally embedded via <iframe srcdoc>, whose document URL is
+      // "about:srcdoc" — but browsers resolve a plain href="#combat" against the *parent
+      // page's* URL, not that. Clicking the TOC then isn't a same-document fragment
+      // scroll: it's a real navigation to "<parent page URL>#combat", which the iframe
+      // dutifully fetches, replacing the report with a fresh copy of the app shell (the
+      // upload prompt). Intercept in-page anchor clicks and scroll manually instead of
+      // letting the browser resolve/navigate them at all.
+      '<script>\n' +
+      '(function () {\n' +
+      '  document.addEventListener("click", function (e) {\n' +
+      '    var a = e.target.closest("a[href^=\\"#\\"]");\n' +
+      '    if (!a || a.getAttribute("href").length < 2) return;\n' +
+      '    var target = document.getElementById(a.getAttribute("href").slice(1));\n' +
+      '    if (!target) return;\n' +
+      '    e.preventDefault();\n' +
+      '    target.scrollIntoView({ behavior: "smooth", block: "start" });\n' +
+      '  });\n' +
+      '})();\n' +
+      '</script>\n' +
+      '</body></html>';
   }
 
   var api = { buildStats: buildStats, buildReportHTML: buildReportHTML, SIDES: SIDES, CATS: CATS, CAT_NAME: CAT_NAME };
