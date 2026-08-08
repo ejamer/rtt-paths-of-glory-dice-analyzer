@@ -1,5 +1,7 @@
 # Paths of Glory — Dice Analyzer
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 **🔗 https://ejamer.github.io/rtt-paths-of-glory-dice-analyzer/**
 
 A static, no-backend web page that turns a saved *Paths of Glory* game log
