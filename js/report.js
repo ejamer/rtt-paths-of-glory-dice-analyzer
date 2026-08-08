@@ -730,62 +730,9 @@
     meta = meta || {};
     var stats = buildStats(rows, combats);
     var overallDiff = stats.overallStats.cp.mean - stats.overallStats.ap.mean;
-    var betterSide = overallDiff > 0 ? "cp" : (overallDiff < 0 ? "ap" : null);
-
-    // Paragraph 1 — raw luck: are the dice themselves lopsided, independent of game context?
-    var verdictP1;
-    if (Math.abs(overallDiff) < 0.15) {
-      verdictP1 =
-        "Overall raw die averages are nearly identical (CP " + fmt(stats.overallStats.cp.mean) + " vs " +
-        "AP " + fmt(stats.overallStats.ap.mean) + ", both close to the fair-die expectation of 3.5), and neither " +
-        "side's distribution is far enough from uniform to call the dice themselves biased " +
-        "(chi-square " + fmt(stats.chi2.cp) + " / " + fmt(stats.chi2.ap) + ", critical value at p=0.05 is " + CHI2_CRIT_05 + ").";
-    } else {
-      var lead = SIDE_NAME[betterSide];
-      var other = betterSide === "cp" ? "ap" : "cp";
-      verdictP1 =
-        lead + " has rolled noticeably higher on average (" + fmt(stats.overallStats[betterSide].mean) + " vs " +
-        fmt(stats.overallStats[other].mean) + "), though with only " +
-        (stats.overallStats.cp.n + stats.overallStats.ap.n) + " rolls total this could still be within normal variance.";
-    }
-
-    // Paragraph 2 — combat: win tally, then whether *unexpected* wins (the real tell for
-    // whether good dice landed at the right moment) skew toward one side.
+    // Reused by both the summary cards and the Combat section's tables below.
     var wt = stats.winTally;
     var ev = stats.expVsActual;
-    // Unexpected wins count double underdog ties when scoring "who the dice helped" — a full
-    // upset is a bigger break than fighting a losing combat to a draw. Only called for one side
-    // if the gap is more than 15% of the combined score; inside that, treat it as a wash.
-    var GOOD_BREAK_THRESHOLD = 0.15;
-    var verdictP2 =
-      SIDE_NAME.cp + " has won " + wt.cp.win + " of " + (wt.cp.win + wt.cp.tie + wt.cp.loss) +
-      " resolved combats to " + SIDE_NAME.ap + "'s " + wt.ap.win + ". ";
-    if (ev.comparable) {
-      var cpUp = ev.upsetsBySide.cp, apUp = ev.upsetsBySide.ap;
-      var cpTie = ev.underdogTiesBySide.cp, apTie = ev.underdogTiesBySide.ap;
-      verdictP2 += SIDE_NAME.cp + " picked up " + cpUp + " unexpected win" + (cpUp === 1 ? "" : "s") +
-        " and " + cpTie + " underdog tie" + (cpTie === 1 ? "" : "s") + " to " + SIDE_NAME.ap + "'s " +
-        apUp + " and " + apTie + ". ";
-      var cpScore = cpUp * 2 + cpTie, apScore = apUp * 2 + apTie, totalScore = cpScore + apScore;
-      var scoreDiffPct = totalScore ? Math.abs(cpScore - apScore) / totalScore : 0;
-      if (scoreDiffPct > GOOD_BREAK_THRESHOLD) {
-        var goodLead = cpScore > apScore ? "cp" : "ap";
-        verdictP2 += "Weighing wins twice as heavily as ties, that tilts toward " + SIDE_NAME[goodLead] +
-          " — the timing of good dice probably helped them out (though not every battle carries the same " +
-          "strategic weight, so treat this as a rough read, not the final word).";
-      } else {
-        verdictP2 += "Weighing wins twice as heavily as ties, that's close enough between the two sides that " +
-          "the timing of good dice probably didn't help either side much (though not every battle carries the " +
-          "same strategic weight, so treat this as a rough read, not the final word).";
-      }
-    } else {
-      verdictP2 += "See the Combat section below for the full expected-vs-actual breakdown.";
-    }
-
-    // Paragraph 3 — pointer to the other categories.
-    var verdictP3 =
-      "The categories below break things down further — see Mandated Offensive, Siege, and Entrench for how " +
-      "those rolls may have affected the outcome as well.";
 
     var catRowsMap = {};
     CATS.forEach(function (c) { catRowsMap[c] = rows.filter(function (r) { return r.category === c; }); });
@@ -841,6 +788,16 @@
       '<p class="subtitle">' + rows.length + ' die rolls parsed from the game log' + (gameLabel ? ' · ' + gameLabel : '') + '</p>\n' +
 
       // ---------------- SUMMARY ----------------
+      '<h2 id="summary">About This Report</h2>\n' +
+      '<p>This report offers a look at how dice results compare across different targets — Combat, Entrench, Siege,\n' +
+      'and Mandated Offensive — based on the game log you uploaded. It\'s just for fun: the numbers below are laid\n' +
+      'out for browsing, not to render a verdict on either side\'s luck. Use the links below to jump to a section.</p>\n' +
+      '<nav class="toc"><strong>Jump to:</strong> ' +
+      '<a href="#raw-averages">Raw Averages</a> · <a href="#combat">Combat</a> · <a href="#entrench">Entrench</a> · ' +
+      '<a href="#siege">Siege</a> · <a href="#mandated-offensive">Mandated Offensive</a></nav>\n' +
+
+      // ---------------- RAW AVERAGES ----------------
+      '<h2 id="raw-averages">Raw Averages</h2>\n' +
       '<div class="cards">\n' +
       '  <div class="card ap-accent"><div class="lbl">Allied Powers avg roll</div><div class="big">' + fmt(s.overallStats.ap.mean) + '</div>' +
       '<div class="lbl">n=' + s.overallStats.ap.n + ' · σ=' + fmt(s.overallStats.ap.std) + '</div></div>\n' +
@@ -851,13 +808,8 @@
       '  <div class="card"><div class="lbl">Combats resolved</div><div class="big">' + (wt.cp.win + wt.cp.tie + wt.cp.loss) + '</div>' +
       '<div class="lbl">AP ' + wt.ap.win + 'W–' + wt.ap.tie + 'T–' + wt.ap.loss + 'L</div></div>\n' +
       '</div>\n' +
-      '<h2 id="summary">Summary</h2>\n<p>' + verdictP1 + '</p>\n<p>' + verdictP2 + '</p>\n<p>' + verdictP3 + '</p>\n' +
-      '<nav class="toc"><strong>Jump to:</strong> ' +
-      '<a href="#raw-averages">Raw Averages</a> · <a href="#combat">Combat</a> · <a href="#entrench">Entrench</a> · ' +
-      '<a href="#siege">Siege</a> · <a href="#mandated-offensive">Mandated Offensive</a></nav>\n' +
-
-      // ---------------- RAW AVERAGES ----------------
-      '<h2 id="raw-averages">Raw Averages</h2>\n' +
+      '<p class="section-intro">Every roll of the game, both sides pooled together regardless of what the roll was\n' +
+      'for, averaged and compared against the fair-die expectation of 3.5.</p>\n' +
       '<div class="panel"><div class="chart-wrap">' + svgBarOverall(s) + '</div></div>\n' +
       '<h3>Distribution — how close to random?</h3>\n' +
       '<p class="note">Each side\'s rolls broken out 1–6, as a share of that side\'s total rolls, against the 16.7% a\n' +
@@ -868,13 +820,14 @@
       '    <span><span class="dot" style="background:var(--cp)"></span>Central Powers (χ²=' + fmt(s.chi2.cp) + ')</span>\n' +
       '  </div>\n</div>\n' +
       '<h3>Average roll over time</h3>\n' +
-      '<p class="note">One turn, one dot per side — no connecting line, since each turn\'s average is its own\n' +
-      'independent event; compare the two dots\' height on a given turn to see who rolled higher. The cumulative\n' +
-      'average below (running mean from the first roll, in actual chronological roll order — every category mixed\n' +
-      'together as it happened) shows how each side\'s average has settled over the course of the game.</p>\n' +
+      '<p class="note">Average roll per turn, one dot per side — no connecting line, since each turn\'s average is\n' +
+      'its own independent event. Compare the two dots\' height on a given turn to see who rolled higher.</p>\n' +
       '<div class="panel"><div class="chart-wrap">' + svgTrend(s) + '</div>\n  <div class="legend">\n' +
       '    <span><span class="dot" style="background:var(--ap)"></span>Allied Powers</span>\n' +
       '    <span><span class="dot" style="background:var(--cp)"></span>Central Powers</span>\n  </div>\n</div>\n' +
+      '<p class="note">Cumulative (running) average from the first roll, in actual chronological roll order — every\n' +
+      'category mixed together as it happened — showing how each side\'s average has settled over the course of the\n' +
+      'game.</p>\n' +
       '<div class="panel"><div class="chart-wrap">' + svgRolling(s) + '</div></div>\n' +
       '<h3>By category</h3>\n' +
       '<p class="note">Average roll broken out by what the roll was <em>for</em>. Faint bars mean that side made no\n' +
@@ -882,15 +835,14 @@
       '<div class="panel"><div class="chart-wrap">' + svgCategoryBars(s) + '</div>\n  <div class="legend">\n' +
       '    <span><span class="dot" style="background:var(--ap)"></span>Allied Powers</span>\n' +
       '    <span><span class="dot" style="background:var(--cp)"></span>Central Powers</span>\n  </div>\n</div>\n' +
+      '<p class="note">Same category breakdown as the chart above, as roll counts and averages.</p>\n' +
       '<div class="panel"><table><thead><tr><th>Category</th><th>AP n</th><th>AP avg</th><th>CP n</th><th>CP avg</th></tr></thead>' +
       '<tbody>' + catCompareRows(s) + '</tbody></table></div>\n' +
 
       // ---------------- COMBAT ----------------
       '<h2 id="combat">Combat</h2>\n' +
-      '<p class="section-intro">Attacker and defender fire dice, looked up on the Combat Results Table for their\n' +
-      'force strength, decide who inflicts more losses. Higher rolls are always better, but a small force attacking\n' +
-      'a much larger one is expected to lose the exchange even with the dice on its side — the sub-sections below\n' +
-      'separate the roll from that context.</p>\n' +
+      '<p class="section-intro">High combat rolls are always better, but the outcome depends on many factors including \n' +
+      'relative strengths of the forces involved, terrain and modifiers, and specific circumstances of each engagement.</p>\n' +
       '<h3>Roll difference, per combat</h3>\n' +
       '<p class="note">CP\'s raw roll minus AP\'s raw roll in each combat, regardless of who attacked or defended —\n' +
       'the "higher is better" head-to-head view, independent of Combat Factors.</p>\n' +
@@ -899,11 +851,13 @@
       '<p class="note">Win/tie/loss per side, straight from the game\'s own "X:Y victory" result for each combat.</p>\n' +
       '<div class="panel"><table><thead><tr><th>Side</th><th>Wins</th><th>Ties</th><th>Losses</th><th>Win rate</th></tr></thead>' +
       '<tbody>' + winRows(s) + '</tbody></table></div>\n' +
-      '<h3>Expected vs. actual — how often did the underdog win?</h3>\n' +
-      '<p class="note">For each combat, "expected" losses for both sides come from the Combat Results Table using a\n' +
-      'die roll of 3 and 4 (methodology\'s fixed stand-in for a typical roll, not a full probability-weighted average) —\n' +
-      'a measure of what the stacks alone would produce. Comparing that to the actual "X:Y victory" result shows how\n' +
-      'often the dice overturned what the force strengths alone predicted.</p>\n' +
+      '<h3>Expected vs. actual losses</h3>\n' +
+      '<p class="note">For each combat, "expected" losses can be determined from the Combat Results Table using an\n' +
+      'with each side\'s strength with column shift and die modifier applied to an average die value (roll of 3.5).</p>\n' +
+      '<p class="note">→ <b>Unexpected wins</b> occur when the dice favor the weaker side, allowing them to win a battle\n' +
+      'and inflict higher losses on their opponent, despite the odds.</p>\n' +
+      '<p class="note">→ <b>Underdog ties</b> occur when one side was expected to win outright, but the actual result was a tie\n' +
+      'instead - typically a boon to the weaker side who fought to a draw instead of losing.</p>\n' +
       '<div class="panel"><table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>' +
       '<tr><td>Combats compared</td><td>' + ev.comparable + '</td></tr>' +
       '<tr><td>Went against the expected winner</td><td>' + ev.upsetCount + ' (' + pct(ev.upsetCount, ev.comparable) + '%)</td></tr>' +
@@ -912,10 +866,6 @@
       '<tr><td>Unexpected wins — Central Powers</td><td>' + ev.upsetsBySide.cp + '</td></tr>' +
       '<tr><td>Underdog ties — Central Powers</td><td>' + ev.underdogTiesBySide.cp + '</td></tr>' +
       '</tbody></table></div>\n' +
-      '<p class="note">"Underdog ties" are combats where a side was expected to win outright but the actual\n' +
-      'result was a tie instead — counted against the expected winner above. The tie itself is credited to the\n' +
-      '<em>other</em> side below: they were expected to lose this one outright and fought it to a draw instead,\n' +
-      'which reads as a good result for them (and a below-expectation one for whoever was favored).</p>\n' +
       SIDES.map(function (sd) {
         return upsetDetailsSection("Unexpected wins — " + SIDE_NAME[sd], ev.upsetDetails[sd]) +
           upsetDetailsSection("Underdog ties — " + SIDE_NAME[sd], ev.underdogTieDetails[sd]);
@@ -928,8 +878,7 @@
       '    <span><span class="dot" style="background:var(--cp)"></span>Central Powers</span>\n  </div>\n</div>\n' +
       '<h3>Retreats</h3>\n' +
       '<p class="note">How often each side was forced to retreat by a lost combat, and how many of those retreats\n' +
-      'were canceled (taking extra losses to hold the space instead). Length is the rules formula — the loss margin\n' +
-      'between attacker and defender, capped at 2 spaces — not the destination units actually moved to.</p>\n' +
+      'were canceled (taking extra losses to hold the space instead).</p>\n' +
       '<div class="panel"><table><thead><tr><th>Side</th><th>Forced — 1 space</th><th>Forced — 2 spaces</th><th>Canceled</th></tr></thead>' +
       '<tbody>' + retreatRows(s) + '</tbody></table></div>\n' +
       '<h3>Attacker vs. defender</h3>\n' +
@@ -945,8 +894,7 @@
       // ---------------- ENTRENCH ----------------
       '<h2 id="entrench">Entrench</h2>\n' +
       '<p class="section-intro">Entrenching requires a roll at or under the attempting Army\'s loss factor (a\n' +
-      'modifier sometimes relaxes that target by 1). Overall rate first, then split by side into nationality and\n' +
-      'target-value breakdowns.</p>\n' +
+      'modifier sometimes relaxes that target by 1).</p>\n' +
       '<div class="panel"><table><thead><tr><th>Entrench attempts</th><th>Succeeded</th><th>Total</th><th>Rate</th></tr></thead>' +
       '<tbody>' + rateRows(s.entRate, "entrench") + '</tbody></table></div>\n' +
       '<h3>By nationality</h3>\n' +
@@ -959,7 +907,7 @@
           '<tbody>' + entrenchNationalityRows(s.entrenchByNationality[sd]) + '</tbody></table></div>\n';
       }).join("") +
       '<h3>By target value</h3>\n' +
-      '<p class="note">Target value on the raw roll, after folding in any roll modifier (e.g. a loss factor of 3 with a\n' +
+      '<p class="note">Target value on the raw entrench roll, after folding in any roll modifier (e.g. a loss factor of 3 with a\n' +
       '−1 modifier tests against an effective target of 4).</p>\n' +
       SIDES.map(function (sd) {
         return '<h4>' + SIDE_NAME[sd] + '</h4>\n<div class="panel"><div class="chart-wrap">' +
@@ -991,6 +939,8 @@
           svgMandatedByTurnSide(s, sd) + '</div></div>\n';
       }).join("") +
       '<h3>Outcome frequency</h3>\n' +
+      '<p class="note">How often each possible table outcome (the nation directed to attack, or another effect)\n' +
+      'came up across this side\'s mandated offensive rolls.</p>\n' +
       SIDES.map(function (sd) {
         return '<h4>' + SIDE_NAME[sd] + '</h4>\n<div class="panel"><div class="chart-wrap">' +
           svgOutcomeFrequency(s.mandatedFrequency[sd], sd) + '</div></div>\n';

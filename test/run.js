@@ -84,7 +84,7 @@ assertEq(stats.flankBySideMod.cp["+1"], [1, 1], "fixture: flank success rate bro
 
 var html = PogReport.buildReportHTML(parsed.rows, parsed.combats, parsed.meta);
 assertTrue(html.indexOf("<h1>") !== -1 && html.indexOf("</html>") !== -1, "fixture: report HTML renders top-to-bottom");
-["Summary", "Combat", "Entrench", "Siege", "Mandated Offensive"].forEach(function (section) {
+["About This Report", "Combat", "Entrench", "Siege", "Mandated Offensive"].forEach(function (section) {
   assertTrue(html.indexOf("<h2>" + section) !== -1 || html.indexOf(">" + section + "<") !== -1 || html.indexOf(section) !== -1,
     "fixture: report includes the " + section + " section");
 });
