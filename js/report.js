@@ -203,7 +203,6 @@
     // --- entrench by nationality and by effective target value, split per side (nationality
     // already implies side, but combining CP+AP in one table buries the side-specific read) ---
     var entrenchRows = rows.filter(function (r) { return r.category === "entrench"; });
-    var entrenchUnknownNationality = entrenchRows.filter(function (r) { return !r.nationality; }).length;
     var entrenchByNationality = {}, entrenchByTarget = {};
     SIDES.forEach(function (s) {
       var sideRows = entrenchRows.filter(function (r) { return r.side === s; });
@@ -279,7 +278,7 @@
       winTally: winTally, turns: turns, perTurn: perTurn, rolling: rolling,
       rollDiffHist: rollDiffHist, expVsActual: expVsActual, winTimeline: winTimeline,
       retreatBySide: retreatBySide, flankModifiers: flankModifiers, flankBySideMod: flankBySideMod,
-      entrenchByNationality: entrenchByNationality, entrenchUnknownNationality: entrenchUnknownNationality,
+      entrenchByNationality: entrenchByNationality,
       entrenchByTarget: entrenchByTarget, siegeByTarget: siegeByTarget,
       mandatedByTurn: mandatedByTurn, mandatedFrequency: mandatedFrequency,
     };
@@ -898,11 +897,8 @@
       '<div class="panel"><table><thead><tr><th>Entrench attempts</th><th>Succeeded</th><th>Total</th><th>Rate</th></tr></thead>' +
       '<tbody>' + rateRows(s.entRate, "entrench") + '</tbody></table></div>\n' +
       '<h3>By nationality</h3>\n' +
-      (s.entrenchUnknownNationality ? '<p class="note">' + s.entrenchUnknownNationality + ' entrench attempt(s) don\'t have an ' +
-        'identifiable unit in the log (e.g. entrenching as part of a combined move-and-entrench action) and are left out ' +
-        'of this breakdown.</p>\n' : '') +
       SIDES.map(function (sd) {
-        return '<h4>' + SIDE_NAME[sd] + '</h4>\n<div class="panel"><table><thead><tr><th>Nationality</th><th>Target</th>' +
+        return '<h4>' + SIDE_NAME[sd] + '</h4>\n<div class="panel"><table><thead><tr><th>Nationality</th><th>Target Roll</th>' +
           '<th>Succeeded</th><th>Failed</th><th>Total</th><th>Rate</th></tr></thead>' +
           '<tbody>' + entrenchNationalityRows(s.entrenchByNationality[sd]) + '</tbody></table></div>\n';
       }).join("") +

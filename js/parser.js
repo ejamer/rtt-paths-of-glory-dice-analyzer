@@ -22,6 +22,11 @@
   var DEF_FIRE_RE   = '<div class="group (cp|ap)">Defender\'s fire \\((\\d+) CF\\):</div>';
   var VICTORY_RE    = '<div class="bold group (?:cp|ap)">(\\d+):(\\d+) (?:(attacker|defender) victory|no combat winner)</div>';
   var RETREAT_RE    = '<div class="group (?:cp|ap)">Retreat( canceled)?:</div>';
+  // Precedes a run of unit lines within a combined Move action — the units listed after it either
+  // move on ("<unit> → <dest>") or stay and entrench in this origin space ("<unit> entrench"),
+  // which is how an entrenching unit's space is recovered when the log has no standalone
+  // "Entrench attempt in <space>" immediately after its declaration (see pendingEntrenchQueue below).
+  var MOVED_FROM_RE = '<div>Moved from <span class="spacetip">([^<]+)</span></div>';
   var ENTRENCH_UNIT_RE = '<div class="i"><span class="piecetip (?:ap|cp)-unit"[^>]*>([^<]+)</span> entrench</div>';
   var ENTRENCH_RE   = '<div>Entrench attempt in <span class="spacetip">([^<]+)</span></div>';
   var FLANK_RE      = '<div class="group (cp|ap)">Flank attempt:</div>';
@@ -34,7 +39,7 @@
 
   var COMBINED = new RegExp(
     [TURN_RE, ACTION_RE, H4_RE, MANDATED_HDR, MO_LINE_RE,
-     ATT_FIRE_RE, DEF_FIRE_RE, VICTORY_RE, RETREAT_RE, ENTRENCH_UNIT_RE, ENTRENCH_RE,
+     ATT_FIRE_RE, DEF_FIRE_RE, VICTORY_RE, RETREAT_RE, MOVED_FROM_RE, ENTRENCH_UNIT_RE, ENTRENCH_RE,
      FLANK_RE, FLANK_MOD_RE, COLUMN_SHIFT_RE, DIE_MOD_RE, SIEGE_HDR_RE, SIEGE_RESULT_RE, DIE_RE].join("|"),
     "g"
   );
@@ -124,6 +129,7 @@
     var DEF_FIRE_M = new RegExp("^" + DEF_FIRE_RE);
     var VICTORY_M = new RegExp("^" + VICTORY_RE);
     var RETREAT_M = new RegExp("^" + RETREAT_RE);
+    var MOVED_FROM_M = new RegExp("^" + MOVED_FROM_RE);
     var ENTRENCH_UNIT_M = new RegExp("^" + ENTRENCH_UNIT_RE);
     var ENTRENCH_M = new RegExp("^" + ENTRENCH_RE);
     var FLANK_MOD_M = new RegExp("^" + FLANK_MOD_RE);
@@ -141,7 +147,18 @@
     var pendingFireShift = 0, pendingFireShiftReasons = []; // net column shift (R=+, L=-) accumulated between the fire header and its die
     var pendingFireDieMod = 0, pendingFireDieModReasons = []; // net die-roll modifier (e.g. "+1 Flamethrowers") accumulated the same way
     var pendingEntrench = null; // {space, nationality}
-    var pendingEntrenchNationality = "";
+    // Queue of {nationality, space} from "<unit> entrench" declaration lines, not yet claimed by an
+    // "Entrench attempt in <space>" line. In a combined move-and-entrench action, several units can
+    // each declare "entrench" up front (interleaved with unrelated move lines for other units), and
+    // the "Entrench attempt in <space>" + die-roll lines that resolve them are grouped together
+    // afterward, one per unit — so a single pending slot isn't enough once more than one unit
+    // declares entrench in the same action. `space` (recovered from the preceding "Moved from
+    // <space>" line — an entrenching unit didn't move on, so it stayed at that origin) lets an
+    // attempt line find its matching declaration by space rather than assuming declaration order
+    // matches attempt order; declarations with no such context (plain, non-combined entrench
+    // actions) carry space: null and are matched by FIFO order among themselves instead.
+    var pendingEntrenchQueue = [];
+    var currentMoveOrigin = null; // space named by the most recent "Moved from <space>" line, reset each action
     var pendingFlank = false;
     var pendingFlankModifier = "";
     var pendingSiegeSpace = null;
@@ -154,10 +171,12 @@
       if (g.indexOf('<div class="h1">Turn') === 0) {
         turn = parseInt(g.match(TURN_M)[1], 10);
         actionNum = null; combatSpace = null; currentCombat = null;
+        currentMoveOrigin = null; pendingEntrenchQueue = [];
       } else if (g.indexOf('<div class="h3') === 0) {
         var am = g.match(ACTION_M);
         actionNum = parseInt(am[2], 10);
         combatSpace = null; currentCombat = null;
+        currentMoveOrigin = null; pendingEntrenchQueue = [];
       } else if (g.indexOf('<div class="h4') === 0) {
         var hm = g.match(H4_M);
         combatSpace = hm[2];
@@ -211,12 +230,28 @@
           currentCombat.retreat = currentCombat.retreat || { forced: false, canceled: false };
           if (rm[1]) currentCombat.retreat.canceled = true; else currentCombat.retreat.forced = true;
         }
+      } else if (g.indexOf("<div>Moved from") === 0) {
+        currentMoveOrigin = g.match(MOVED_FROM_M)[1];
       } else if (g.indexOf('<div class="i"><span class="piecetip') === 0 && g.indexOf(" entrench</div>") !== -1) {
         var eum = g.match(ENTRENCH_UNIT_M);
-        pendingEntrenchNationality = nationalityOf(eum[1]);
+        pendingEntrenchQueue.push({ nationality: nationalityOf(eum[1]), space: currentMoveOrigin });
       } else if (g.indexOf("<div>Entrench attempt in") === 0) {
-        pendingEntrench = { space: g.match(ENTRENCH_M)[1], nationality: pendingEntrenchNationality };
-        pendingEntrenchNationality = "";
+        var attemptSpace = g.match(ENTRENCH_M)[1];
+        // Prefer a declaration whose "Moved from <space>" origin matches this attempt's space —
+        // that's the unit that actually stayed put and entrenched here. Only fall back to FIFO
+        // (oldest declaration with no recorded space) for plain, non-combined entrench actions,
+        // where there's normally just the one declaration anyway.
+        var qi = -1, qq;
+        for (qq = 0; qq < pendingEntrenchQueue.length; qq++) {
+          if (pendingEntrenchQueue[qq].space === attemptSpace) { qi = qq; break; }
+        }
+        if (qi === -1) {
+          for (qq = 0; qq < pendingEntrenchQueue.length; qq++) {
+            if (pendingEntrenchQueue[qq].space === null) { qi = qq; break; }
+          }
+        }
+        var entrenchNationality = qi === -1 ? "" : pendingEntrenchQueue.splice(qi, 1)[0].nationality;
+        pendingEntrench = { space: attemptSpace, nationality: entrenchNationality };
       } else if (g.indexOf('<div class="group') === 0 && g.indexOf("Flank attempt:") !== -1) {
         pendingFlank = true;
         pendingFlankModifier = "";

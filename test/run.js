@@ -56,6 +56,22 @@ assertEq(entrenchAp.nationality, "FR", "fixture: entrench nationality captured (
 assertEq(entrenchCp.nationality, "GE", "fixture: entrench nationality captured (CP)");
 assertEq(entrenchCp.entrench_attempt_no, 1, "fixture: entrench attempt number assigned");
 
+// ---------- fixture: combined move-and-entrench action — two units of different
+// nationalities each declare "entrench" (interleaved with unrelated move context) before
+// either "Entrench attempt in <space>" line appears, and the two attempts resolve in the
+// REVERSE of declaration order. Naive FIFO pairing would swap the nationalities; matching
+// each attempt to its declaration by the "Moved from <space>" origin gets it right. ----------
+var combinedEntrenchHtml = fs.readFileSync(path.join(__dirname, "fixture-combined-entrench.html"), "utf-8");
+var combinedParsed = PogParser.parseLog(combinedEntrenchHtml);
+var combinedEntrenchRows = combinedParsed.rows.filter(function (r) { return r.category === "entrench"; });
+assertEq(combinedEntrenchRows.length, 2, "combined entrench: 2 attempts parsed");
+assertEq(combinedEntrenchRows.filter(function (r) { return !r.nationality; }).length, 0,
+  "combined entrench: no attempt left without a nationality");
+var spaceANat = combinedEntrenchRows.filter(function (r) { return r.space === "SpaceA"; })[0].nationality;
+var spaceBNat = combinedEntrenchRows.filter(function (r) { return r.space === "SpaceB"; })[0].nationality;
+assertEq(spaceANat, "GE", "combined entrench: SpaceA attempt matched to GE 5 by origin space, not declaration order");
+assertEq(spaceBNat, "AH", "combined entrench: SpaceB attempt matched to AH 2 by origin space, not declaration order");
+
 var combatFireRows = parsed.rows.filter(function (r) { return r.category === "combat_fire"; });
 var combatFireRow = combatFireRows[0], defenderFireRow = combatFireRows[1];
 assertEq(combatFireRow.force_type, "Army", "fixture: combat force type (Army/Corps) preserved on the row");
